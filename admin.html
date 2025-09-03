@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"/>
+  <title>大螢幕管理端</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin:20px; }
+    #stage { border:2px solid #000; display:block; margin-top:20px; }
+    #qrcode { margin-top:10px; }
+  </style>
+</head>
+<body>
+  <h1>簽約儀式 - 管理 / 大螢幕</h1>
+  <button id="create">建立活動</button>
+  <div id="eventInfo"></div>
+  <canvas id="qrcode"></canvas>
+  <canvas id="stage" width="1000" height="1000"></canvas>
+
+<script>
+const stage = document.getElementById('stage');
+const ctx = stage.getContext('2d');
+let socket, eventId;
+
+function drawStroke(points, size, color){
+  if(points.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = size;
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for(let i=1;i<points.length;i++){
+    ctx.lineTo(points[i][0], points[i][1]);
+  }
+  ctx.stroke();
+}
+
+document.getElementById('create').onclick = async ()=>{
+  const r = await fetch('/api/create-event',{method:'POST'});
+  const j = await r.json();
+  eventId = j.eventId;
+  document.getElementById('eventInfo').innerText = "活動ID: "+eventId;
+  const url = location.origin + j.signerBaseUrl;
+  QRCode.toCanvas(document.getElementById('qrcode'), url);
+
+  socket = io();
+  socket.emit('join:event',{eventId, role:'admin'});
+  socket.on('stroke',({points,size,color})=>drawStroke(points,size,color));
+  socket.on('clear',()=>ctx.clearRect(0,0,stage.width,stage.height));
+};
+</script>
+</body>
+</html>
