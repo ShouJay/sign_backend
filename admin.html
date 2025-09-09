@@ -2,52 +2,259 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8"/>
-  <title>大螢幕管理端</title>
+  <title>簽約儀式 - 管理 / 大螢幕</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
-    body { font-family: sans-serif; margin:20px; }
-    #stage { border:2px solid #000; display:block; margin-top:20px; }
-    #qrcode { margin-top:10px; }
+    :root { --gap:12px; --card:#fff; --text:#222; --muted:#666; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:var(--text); background:#f5f6f8; }
+    main { padding:16px; }
+    .row { display:flex; gap:var(--gap); align-items:center; flex-wrap: wrap; }
+    .card { background:var(--card); border:1px solid #e6e6e6; border-radius:12px; padding:12px; }
+    button { padding:8px 12px; border-radius:10px; border:1px solid #d0d0d0; background:#fff; cursor:pointer; }
+    input { padding:8px 10px; border:1px solid #d0d0d0; border-radius:10px; }
+    #stage { border:2px solid #000; display:block; margin-top:12px; background:#fff; width:100%; max-width:100%; }
+    #qrcodeA, #qrcodeB { margin-top:8px; border:1px dashed #aaa; background:#fff; }
+    .muted { color:var(--muted); }
+
+    /* 登入遮罩 */
+    #authOverlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:9999; }
+    #authCard { width:min(92vw, 420px); background:#fff; border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:10px; }
+    #authTabs { display:flex; gap:8px; }
+    .ghost { background:#fafafa; }
+
+    /* 主內容（登入後顯示） */
+    .gated { display:none; }
+
+    @media (max-width: 640px) { .row > * { min-width: 46%; } }
   </style>
 </head>
 <body>
-  <h1>簽約儀式 - 管理 / 大螢幕</h1>
-  <button id="create">建立活動</button>
-  <div id="eventInfo"></div>
-  <canvas id="qrcode"></canvas>
-  <canvas id="stage" width="1000" height="1000"></canvas>
+  <!-- 登入 / 註冊 / 忘記密碼 -->
+  <div id="authOverlay">
+    <div id="authCard">
+      <h2 style="margin:0;">登入</h2>
+      <div id="authTabs">
+        <button id="tabLogin">登入</button>
+        <button id="tabRegister" class="ghost">註冊</button>
+        <button id="tabForgot" class="ghost">忘記密碼</button>
+      </div>
+
+      <div id="panelLogin">
+        <input id="loginEmail" placeholder="email">
+        <input id="loginPassword" placeholder="password" type="password">
+        <button id="btnLogin">登入</button>
+      </div>
+
+      <div id="panelRegister" hidden>
+        <input id="regEmail" placeholder="email">
+        <input id="regPassword" placeholder="password" type="password">
+        <button id="btnRegister">註冊</button>
+      </div>
+
+      <div id="panelForgot" hidden>
+        <input id="fgEmail" placeholder="註冊的 email">
+        <button id="btnForgot">取得 6 碼重設碼</button>
+        <small class="muted">（示範系統：重設碼會直接顯示在這裡）</small>
+        <div id="fgCodeBox" style="display:none;">
+          <input id="fgCode" placeholder="重設碼 6 碼" maxlength="6">
+          <input id="fgNewPass" placeholder="新密碼" type="password">
+          <button id="btnReset">送出重設</button>
+        </div>
+      </div>
+
+      <div id="authMsg" class="muted"></div>
+    </div>
+  </div>
+
+  <!-- 主內容（登入後解鎖） -->
+  <main class="gated">
+    <h1 style="margin:6px 0 12px;">簽約儀式 - 管理 / 大螢幕</h1>
+
+    <div class="card" style="margin-bottom:12px;">
+      <div class="row">
+        <input id="qrOrigin" style="min-width:320px" placeholder="QR 連線位址（含 http 與 :3000）">
+        <button id="applyQR">套用 QR 主機</button>
+        <div class="muted">預設為目前頁面 origin</div>
+        <div style="margin-left:auto;">
+          <button id="btnLogout">登出</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px;">
+      <div class="row">
+        <input id="title" placeholder="房間標題 (預設: 簽約儀式)">
+        <input id="w" type="number" placeholder="寬 1000" style="width:120px;">
+        <input id="h" type="number" placeholder="高 1000" style="width:120px;">
+        <button id="createEvent">建立房間</button>
+        <button id="refreshEvents">更新清單</button>
+      </div>
+      <div id="events" class="row" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <div id="eventInfo" style="margin-bottom:6px;"></div>
+      <div class="row">
+        <div>
+          <div>簽名 A</div>
+          <canvas id="qrcodeA" width="200" height="200"></canvas>
+        </div>
+        <div>
+          <div>簽名 B</div>
+          <canvas id="qrcodeB" width="200" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <canvas id="stage" width="1000" height="1000"></canvas>
+  </main>
 
 <script>
+let socket, eventId, eventMeta;
+let token = localStorage.getItem('token') || '';
 const stage = document.getElementById('stage');
 const ctx = stage.getContext('2d');
-let socket, eventId;
 
-function drawStroke(points, size, color){
-  if(points.length < 2) return;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = size;
-  ctx.beginPath();
-  ctx.moveTo(points[0][0], points[0][1]);
-  for(let i=1;i<points.length;i++){
-    ctx.lineTo(points[i][0], points[i][1]);
-  }
-  ctx.stroke();
+function setMsg(t){ document.getElementById('authMsg').textContent = t || ''; }
+function authed(){ return !!token; }
+function gate(open){ document.querySelector('main').style.display = open ? 'block' : 'none'; document.getElementById('authOverlay').style.display = open ? 'none' : 'flex'; }
+function api(path, opt={}){ opt.headers = opt.headers || { 'Content-Type':'application/json' }; if (authed()) opt.headers['Authorization'] = 'Bearer ' + token; return fetch(path, opt); }
+
+// ====== Auth UI 切換 ======
+const panelLogin = document.getElementById('panelLogin');
+const panelRegister = document.getElementById('panelRegister');
+const panelForgot = document.getElementById('panelForgot');
+function showPanel(which){
+  panelLogin.hidden = which !== 'login';
+  panelRegister.hidden = which !== 'reg';
+  panelForgot.hidden = which !== 'forgot';
 }
+document.getElementById('tabLogin').onclick = ()=> showPanel('login');
+document.getElementById('tabRegister').onclick = ()=> showPanel('reg');
+document.getElementById('tabForgot').onclick = ()=> showPanel('forgot');
 
-document.getElementById('create').onclick = async ()=>{
-  const r = await fetch('/api/create-event',{method:'POST'});
+// ====== Auth Actions ======
+document.getElementById('btnLogin').onclick = async ()=>{
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const r = await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
   const j = await r.json();
-  eventId = j.eventId;
-  document.getElementById('eventInfo').innerText = "活動ID: "+eventId;
-  const url = location.origin + j.signerBaseUrl;
-  QRCode.toCanvas(document.getElementById('qrcode'), url);
-
-  socket = io();
-  socket.emit('join:event',{eventId, role:'admin'});
-  socket.on('stroke',({points,size,color})=>drawStroke(points,size,color));
-  socket.on('clear',()=>ctx.clearRect(0,0,stage.width,stage.height));
+  if(!r.ok) return setMsg(j.error||'登入失敗');
+  token = j.token; localStorage.setItem('token', token);
+  document.getElementById('qrOrigin').value = location.origin;
+  gate(true);
+  loadEvents();
+  setMsg('');
 };
+
+document.getElementById('btnRegister').onclick = async ()=>{
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const r = await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+  const j = await r.json();
+  setMsg(r.ok ? '註冊成功，請切到登入' : (j.error||'註冊失敗'));
+};
+
+document.getElementById('btnForgot').onclick = async ()=>{
+  const email = document.getElementById('fgEmail').value.trim();
+  const r = await fetch('/api/forgot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+  const j = await r.json();
+  if(!r.ok) return setMsg(j.error||'送出失敗');
+  setMsg('重設碼（示範用）= ' + (j.code || '（若空白代表該信箱不存在）'));
+  document.getElementById('fgCodeBox').style.display = 'block';
+};
+
+document.getElementById('btnReset').onclick = async ()=>{
+  const email = document.getElementById('fgEmail').value.trim();
+  const code = document.getElementById('fgCode').value.trim();
+  const newPassword = document.getElementById('fgNewPass').value;
+  const r = await fetch('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code,newPassword})});
+  const j = await r.json();
+  setMsg(r.ok ? '重設成功，請以新密碼登入' : (j.error||'重設失敗'));
+};
+
+document.getElementById('btnLogout').onclick = ()=>{
+  token=''; localStorage.removeItem('token'); gate(false); setMsg('你已登出');
+};
+
+// ====== 畫布/房間 ======
+function drawSlots(){
+  const A = eventMeta.slots.A, B = eventMeta.slots.B;
+  ctx.save(); ctx.clearRect(0,0,stage.width,stage.height);
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 2; ctx.font = '16px system-ui'; ctx.fillStyle = '#444';
+  ctx.strokeRect(A.x, A.y, A.w, A.h); ctx.fillText('甲方簽名區(A)', A.x + 8, A.y + 20);
+  ctx.strokeRect(B.x, B.y, B.w, B.h); ctx.fillText('乙方簽名區(B)', B.x + 8, B.y + 20);
+  ctx.restore();
+}
+function drawStrokeInSlot(points, size, color, senderSlot, sw, sh){
+  const slot = eventMeta.slots[senderSlot || 'A']; if(!slot) return;
+  const sx = slot.w / sw, sy = slot.h / sh;
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = size * Math.max(sx, sy);
+  ctx.beginPath(); const p0 = points[0]; ctx.moveTo(slot.x+p0[0]*sx, slot.y+p0[1]*sy);
+  for(let i=1;i<points.length;i++){ const p = points[i]; ctx.lineTo(slot.x+p[0]*sx, slot.y+p[1]*sy); }
+  ctx.stroke(); ctx.restore();
+}
+function clearSlot(senderSlot){ const s = eventMeta.slots[senderSlot||'A']; ctx.clearRect(s.x,s.y,s.w,s.h); drawSlots(); }
+
+async function fetchEventMeta(eid){ const r = await fetch(`/api/event/${eid}`); if(!r.ok) throw new Error('event not found'); return await r.json(); }
+
+function getQrOrigin(){
+  const manual = document.getElementById('qrOrigin')?.value.trim();
+  if (manual) return manual.replace(/\/+$/,'');
+  return location.origin.replace(/\/+$/,'');
+}
+function renderQRCodes(){
+  if(!eventId) return;
+  const base = `${getQrOrigin()}/signer.html?eventId=${eventId}`;
+  QRCode.toCanvas(document.getElementById('qrcodeA'), base + `&slot=A`);
+  QRCode.toCanvas(document.getElementById('qrcodeB'), base + `&slot=B`);
+}
+document.getElementById('applyQR').onclick = ()=> renderQRCodes();
+
+async function createEvent(){
+  const title = document.getElementById('title').value.trim() || undefined;
+  const stageWidth = parseInt(document.getElementById('w').value||'1000',10);
+  const stageHeight = parseInt(document.getElementById('h').value||'1000',10);
+  const r = await api('/api/events',{method:'POST',body:JSON.stringify({title,stageWidth,stageHeight})});
+  const j = await r.json(); if(!r.ok) return alert(j.error||'create failed');
+  await loadEvents(()=>selectEvent(j.eventId));
+}
+async function loadEvents(after){
+  const r = await api('/api/events'); const j = await r.json(); if(!r.ok){ alert(j.error||'list failed'); return; }
+  const box = document.getElementById('events'); box.innerHTML='';
+  j.items.forEach(ev=>{
+    const div = document.createElement('div'); div.className='card'; div.style.minWidth='260px';
+    div.innerHTML = `
+      <div style="font-weight:600;">房號：${ev.id}</div>
+      <div class="muted">${ev.title ? '標題：'+ev.title+' ・ ' : ''}畫布：${ev.stage.width}×${ev.stage.height}</div>
+      <div class="row" style="margin-top:6px;">
+        <button data-id="${ev.id}" class="open">開啟到大螢幕</button>
+        <a href="${ev.adminUrl}" target="_blank"><button class="ghost" type="button">新分頁</button></a>
+      </div>`;
+    box.appendChild(div);
+  });
+  box.querySelectorAll('button.open').forEach(b=> b.onclick = ()=> selectEvent(b.dataset.id));
+  if(after) after();
+}
+async function selectEvent(eid){
+  eventId = eid; eventMeta = await fetchEventMeta(eventId);
+  stage.width = eventMeta.stage.width; stage.height = eventMeta.stage.height;
+  document.getElementById('eventInfo').innerText = `房號：${eventId}  ${eventMeta.title ? '（'+eventMeta.title+'）' : ''}  畫布 ${stage.width}×${stage.height}`;
+  drawSlots(); renderQRCodes();
+  if (socket) socket.disconnect();
+  socket = io(); socket.emit('join:event',{eventId,role:'admin'});
+  socket.on('stroke', ({ points,size,color,senderSlot,sourceWidth,sourceHeight })=> drawStrokeInSlot(points,size,color,senderSlot,sourceWidth,sourceHeight));
+  socket.on('clear', ({ senderSlot })=> clearSlot(senderSlot));
+  socket.on('slots:update', ({A,B})=>{ eventMeta.slots.A=A; eventMeta.slots.B=B; drawSlots(); });
+}
+document.getElementById('createEvent').onclick = createEvent;
+document.getElementById('refreshEvents').onclick = ()=> loadEvents();
+
+// 初始：若已登入直接進；否則停在登入畫面
+if (token) { gate(true); document.getElementById('qrOrigin').value = location.origin; loadEvents(); } else { gate(false); }
 </script>
 </body>
 </html>

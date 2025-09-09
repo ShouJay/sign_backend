@@ -3,56 +3,169 @@
 <head>
   <meta charset="utf-8"/>
   <title>簽名端</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    body { margin:0; }
-    canvas { touch-action:none; width:100vw; height:100vh; display:block; }
-    #toolbar { position:fixed; top:0; left:0; background:#fff; padding:5px; z-index:10; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#f7f7f7; }
+    #toolbar {
+      position:fixed; top:0; left:0; right:0; background:#fff;
+      padding:8px; z-index:10000;
+      box-shadow:0 2px 8px rgba(0,0,0,.08); display:flex; gap:10px; align-items:center;
+    }
+    #pad { touch-action:none; width:100vw; height:100vh; display:block; background:#fff; }
+    .ctrl { display:inline-flex; gap:6px; align-items:center; }
+    button { padding:8px 12px; border-radius:10px; border:1px solid #ccc; background:#f2f2f2; cursor:pointer; }
+    #joinBox { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:11000; }
+    #joinCard { background:#fff; padding:16px; border-radius:12px; width:min(92vw, 420px); display:flex; flex-direction:column; gap:8px; }
+    input[type="text"] { padding:10px; border:1px solid #ccc; border-radius:10px; }
+    #status { position:fixed; bottom:8px; left:8px; background:#000; color:#fff; padding:4px 8px; border-radius:8px; opacity:.75; font-size:12px; }
+    #joinBox[hidden]{ display:none !important; } /* 強制隱藏 */
   </style>
 </head>
 <body>
   <div id="toolbar">
-    <input type="color" id="color" value="#000000"/>
-    <input type="range" id="size" min="2" max="20" value="4"/>
-    <button id="clear">清除</button>
+    <div class="ctrl">顏色 <input type="color" id="color" value="#000000"/></div>
+    <div class="ctrl">粗細 <input type="range" id="size" min="2" max="20" value="4"/></div>
+    <button id="clear" type="button">清除本欄</button>
+    <span id="slotInfo" style="margin-left:auto; font-weight:600;">目前簽名欄：A</span>
   </div>
+
   <canvas id="pad"></canvas>
+
+  <div id="joinBox" hidden>
+    <div id="joinCard">
+      <div style="font-weight:600;font-size:18px;">加入活動</div>
+      <input id="jid" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="輸入 4 碼房間號 (如 4281)" maxlength="4">
+      <input id="jslot" type="text" placeholder="A 或 B" maxlength="1">
+      <button id="joinBtn" type="button">加入</button>
+      <div id="joinMsg" style="color:#888;"></div>
+    </div>
+  </div>
+
+  <div id="status" hidden></div>
 
 <script>
 const pad = document.getElementById('pad');
 const ctx = pad.getContext('2d');
 let drawing=false,last=null,points=[];
-let socket, eventId=new URL(location.href).searchParams.get('eventId');
+let socket, eventId=null, mySlot='A';
 
+// ---------- 畫布尺寸 ----------
 function resize(){
-  pad.width=window.innerWidth; pad.height=window.innerHeight;
+  pad.width = window.innerWidth;
+  pad.height = window.innerHeight;
   ctx.lineCap='round'; ctx.lineJoin='round';
 }
-resize(); window.onresize=resize;
+resize(); window.addEventListener('resize', resize);
 
-socket = io();
-if(eventId) socket.emit('join:event',{eventId,role:'signer'});
+// ---------- 簡單提示 ----------
+function toast(t){ const s=document.getElementById('status'); s.textContent=t; s.hidden=false; clearTimeout(s._t); s._t=setTimeout(()=>s.hidden=true, 2000); }
 
-pad.addEventListener('pointerdown',e=>{
-  drawing=true; last=[e.offsetX,e.offsetY]; points=[last];
+// ---------- 關閉 joinBox ----------
+function hideJoin(){
+  const jb = document.getElementById('joinBox');
+  if (!jb) return;
+  jb.hidden = true;
+  jb.style.display = 'none';
+  jb.setAttribute('aria-hidden','true');
+}
+
+// ---------- Socket ----------
+function attachSocket(){
+  if (socket) socket.disconnect();
+  socket = io({ transports: ['websocket','polling'] });
+  socket.on('connect', ()=> toast('已連線'));
+  socket.on('connect_error', (err)=> toast('連線失敗：'+(err?.message||'')));
+  socket.emit('join:event', { eventId, role:'signer', slot: mySlot });
+  socket.on('joined', ()=>{ toast('已加入房間 '+eventId); });
+}
+
+// ---------- 驗證房間 ----------
+async function validateEvent(id){
+  try {
+    const r = await fetch(`/api/event/${encodeURIComponent(id)}`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+// ---------- 加入流程 ----------
+function startJoinFlow(){
+  const box  = document.getElementById('joinBox');
+  const tips = document.getElementById('joinMsg');
+  box.hidden = false;
+
+  const doJoin = async ()=>{
+    const id = document.getElementById('jid').value.trim();
+    const s  = (document.getElementById('jslot').value.trim() || 'A').toUpperCase();
+    if(!/^[0-9]{4}$/.test(id)){ tips.textContent='請輸入 4 碼數字房間號'; return; }
+    if(s!=='A' && s!=='B'){ tips.textContent='簽名欄位請填 A 或 B'; return; }
+    tips.textContent='檢查房間中…';
+
+    const ev = await validateEvent(id);
+    if(!ev){ tips.textContent='房間不存在，請確認房間號'; return; }
+
+    // 驗證成功 → 進房
+    eventId = id; mySlot = s;
+    document.getElementById('slotInfo').textContent = `目前簽名欄：${mySlot}`;
+    attachSocket();
+    hideJoin();
+    tips.textContent = '';
+  };
+
+  document.getElementById('joinBtn').onclick = doJoin;
+}
+
+// ---------- URL 模式 ----------
+const url = new URL(location.href);
+const qEvent = url.searchParams.get('eventId');
+const qSlot  = (url.searchParams.get('slot') || 'A').toUpperCase();
+if (qEvent) {
+  eventId = qEvent; mySlot = (qSlot==='B'?'B':'A');
+  document.getElementById('slotInfo').textContent = `目前簽名欄：${mySlot}`;
+  validateEvent(eventId).then(ev=>{
+    if(!ev){ startJoinFlow(); return; }
+    attachSocket();
+    hideJoin();
+  });
+} else {
+  startJoinFlow();
+}
+
+// ---------- 繪圖 ----------
+pad.addEventListener('pointerdown', e=>{
+  drawing=true;
+  const rect = pad.getBoundingClientRect();
+  last=[e.clientX-rect.left, e.clientY-rect.top];
+  points=[last];
 });
-pad.addEventListener('pointermove',e=>{
+pad.addEventListener('pointermove', e=>{
   if(!drawing) return;
-  const pt=[e.offsetX,e.offsetY];
+  const rect = pad.getBoundingClientRect();
+  const pt=[e.clientX-rect.left, e.clientY-rect.top];
   ctx.strokeStyle=document.getElementById('color').value;
   ctx.lineWidth=parseInt(document.getElementById('size').value,10);
   ctx.beginPath(); ctx.moveTo(last[0],last[1]); ctx.lineTo(pt[0],pt[1]); ctx.stroke();
   points.push(pt); last=pt;
 });
-pad.addEventListener('pointerup',()=>{
+pad.addEventListener('pointerup', ()=>{
   drawing=false;
   if(eventId && points.length>1){
-    socket.emit('stroke',{eventId,points,size:parseInt(document.getElementById('size').value,10),color:document.getElementById('color').value});
+    socket.emit('stroke',{
+      eventId,
+      points,
+      size: parseInt(document.getElementById('size').value,10),
+      color: document.getElementById('color').value,
+      sourceWidth: pad.width,
+      sourceHeight: pad.height
+    });
   }
   points=[];
 });
 
-document.getElementById('clear').onclick=()=>{
+// 清除
+document.getElementById('clear').onclick = ()=>{
   ctx.clearRect(0,0,pad.width,pad.height);
   if(eventId) socket.emit('clear',{eventId});
 };
