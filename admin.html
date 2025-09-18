@@ -4,45 +4,9 @@
 <meta charset="utf-8"/>
 <title>簽約儀式 - 管理 / 大螢幕</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="stylesheet" href="admin.css">
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-<style>
-  :root{--gap:12px;--card:#fff;--text:#222;--muted:#666}
-  *{box-sizing:border-box}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;color:var(--text);background:#f5f6f8}
-  main{padding:16px;max-width:1200px;margin:0 auto}
-  .row{display:flex;gap:var(--gap);align-items:center;flex-wrap:wrap}
-  .card{background:var(--card);border:1px solid #e6e6e6;border-radius:12px;padding:12px}
-  button{padding:8px 12px;border-radius:10px;border:1px solid #d0d0d0;background:#fff;cursor:pointer}
-  input{padding:8px 10px;border:1px solid #d0d0d0;border-radius:10px}
-  #stage{border:2px solid #000;display:block;margin-top:12px;background:#fff;width:100%;max-width:100%}
-  .muted{color:var(--muted)}
-  .list{display:grid;grid-template-columns:repeat(auto-fill, minmax(260px,1fr));gap:12px}
-  .pill{font-size:12px;padding:2px 6px;border-radius:999px;background:#eee;border:1px solid #ddd}
-
-  /* 登入彈窗 */
-  #authMask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
-  #authCard{background:#fff;border-radius:16px;min-width:min(92vw,480px);padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
-  #authMask[hidden]{display:none!important}
-  #authCard .field{display:flex;flex-direction:column;gap:6px;margin:8px 0}
-  .adminBadge{font-size:12px;color:#fff;background:#1f7a1f;border-radius:999px;padding:2px 8px;margin-left:6px}
-
-  /* QR 卡片式佈局 */
-  .qrGrid{
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
-    gap:12px;
-  }
-  .qrCard{
-    background:#fff;border:1px solid #e6e6e6;border-radius:12px;
-    padding:10px;display:flex;flex-direction:column;align-items:center;
-    box-shadow:0 2px 6px rgba(0,0,0,.06)
-  }
-  .qrCard .cap{
-    font-weight:700;margin-bottom:6px;color:#333
-  }
-  .qrCard canvas{width:160px;height:160px}
-</style>
 </head>
 <body>
 <!-- 登入/註冊/忘記/重設 -->
@@ -83,278 +47,154 @@
 </div>
 
 <main>
-  <div class="row" style="justify-content:space-between;margin-bottom:12px;">
-    <h1 style="margin:0;">簽約儀式 - 管理 / 大螢幕</h1>
-    <div class="row"><div id="who" class="muted"></div><button id="logout">登出</button></div>
+  <!-- 標題區域 -->
+  <div class="fade-in">
+    <h1>📝 簽約儀式管理系統</h1>
+    <div class="row" style="justify-content:center;margin-bottom:24px;">
+      <div id="who" class="muted"></div>
+      <button id="logout" class="danger">🚪 登出</button>
+    </div>
   </div>
 
-  <!-- 建立房間 & 管理者工具 -->
-  <div class="card" style="margin-bottom:12px;">
-    <div class="row">
-      <input id="title" placeholder="房間標題 (預設: 簽約儀式)" style="flex:1;min-width:200px">
-      <input id="w" type="number" placeholder="寬 1000" style="width:120px">
-      <input id="h" type="number" placeholder="高 1000" style="width:120px">
-      <button id="createEvent">建立房間</button>
-      <button id="refreshEvents">更新清單</button>
-      <div id="adminOps" class="row" hidden>
-        <button id="toggleAll">顯示全部房間</button>
-        <button id="clearAllUsers" style="border-color:#f1c0c0;background:#fff0f0">清除所有人的歷史</button>
+  <!-- 控制面板 -->
+  <div class="control-panel fade-in">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 style="margin:0;color:var(--primary);">🎯 房間管理</h2>
+      <div class="status-indicator status-online">
+        <div class="status-dot"></div>
+        <span>系統運行中</span>
       </div>
+    </div>
+    
+    <div class="row">
+      <input id="title" placeholder="🏷️ 房間標題 (預設: 簽約儀式)" style="flex:1;min-width:200px">
+      <input id="w" type="number" placeholder="寬度 1000" style="width:120px">
+      <input id="h" type="number" placeholder="高度 1000" style="width:120px">
+      <button id="createEvent" class="primary">✨ 建立房間</button>
+      <button id="refreshEvents">🔄 更新清單</button>
+    </div>
+    
+    <div id="adminOps" class="row" style="margin-top:12px;" hidden>
+      <button id="toggleAll" class="primary">👁️ 顯示全部房間</button>
+      <button id="clearAllUsers" class="danger">🗑️ 清除所有人的歷史</button>
     </div>
   </div>
 
   <!-- 歷史房間 -->
-  <div class="card" style="margin-bottom:12px;">
-    <div class="row" style="justify-content:space-between;">
-      <div style="font-weight:600">歷史房間</div>
-      <button id="clearMine">清除我的歷史</button>
+  <div class="card fade-in" style="margin-bottom:24px;">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;color:var(--primary);">📚 歷史房間</h3>
+      <button id="clearMine" class="danger">🧹 清除我的歷史</button>
     </div>
-    <div id="events" class="list" style="margin-top:8px;"></div>
+    <div id="events" class="list" style="margin-top:16px;"></div>
   </div>
 
-  <!-- 欄位數 -->
-  <div class="card" style="margin-bottom:12px;">
-    <div id="eventInfo" class="muted" style="margin-bottom:6px;">尚未選擇房間</div>
-    <div class="row">
-      <label>甲方欄位數 <input id="countA" type="number" value="1" min="0" max="8" style="width:80px"></label>
-      <label>乙方欄位數 <input id="countB" type="number" value="1" min="0" max="8" style="width:80px"></label>
-      <button id="applyCounts">套用欄位數（自動排版）</button>
+  <!-- 簽名區域控制 -->
+  <div class="signature-controls fade-in">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="margin:0;color:var(--primary);">🎨 簽名區域設定</h3>
+      <div id="eventInfo" class="muted">尚未選擇房間</div>
+    </div>
+    
+    <!-- 快速設定 -->
+    <div class="row" style="margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <span>甲方欄位數</span>
+        <input id="countA" type="number" value="1" min="0" max="8" style="width:80px">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;">
+        <span>乙方欄位數</span>
+        <input id="countB" type="number" value="1" min="0" max="8" style="width:80px">
+      </label>
+      <button id="applyCounts" class="primary">🎯 自動排版</button>
+      <button id="resetPositions" class="danger">🔄 重置位置</button>
+    </div>
+
+    <!-- 精確位置控制 -->
+    <div id="positionControls" style="display:none;">
+      <h4 style="margin:0 0 12px 0;color:var(--primary);">📍 精確位置調整</h4>
+      <div class="position-controls">
+        <div class="position-group">
+          <h4>甲方位置</h4>
+          <div class="position-inputs">
+            <input id="aX" type="number" placeholder="X座標">
+            <input id="aY" type="number" placeholder="Y座標">
+            <input id="aW" type="number" placeholder="寬度">
+            <input id="aH" type="number" placeholder="高度">
+          </div>
+        </div>
+        <div class="position-group">
+          <h4>乙方位置</h4>
+          <div class="position-inputs">
+            <input id="bX" type="number" placeholder="X座標">
+            <input id="bY" type="number" placeholder="Y座標">
+            <input id="bW" type="number" placeholder="寬度">
+            <input id="bH" type="number" placeholder="高度">
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button id="applyPositions" class="primary">✅ 套用位置</button>
+        <button id="cancelPositions">❌ 取消</button>
+      </div>
     </div>
   </div>
 
   <!-- QR 與畫布 -->
-  <div class="card">
-    <div style="font-weight:600">簽名 QR</div>
+  <div class="card fade-in">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="margin:0;color:var(--primary);">📱 簽名 QR 碼</h3>
+      <div class="row">
+        <button id="downloadQR" class="primary">💾 下載 QR</button>
+        <button id="printQR" class="primary">🖨️ 列印 QR</button>
+      </div>
+    </div>
+    
     <div class="row">
-      <div style="flex:1;min-width:260px">
-        <div class="muted" style="margin:4px 0 8px">甲方</div>
+      <div style="flex:1;min-width:300px">
+        <div class="muted" style="margin:4px 0 12px;font-weight:600;">👤 甲方簽名區域</div>
         <div id="qrA" class="qrGrid"></div>
       </div>
-      <div style="flex:1;min-width:260px">
-        <div class="muted" style="margin:4px 0 8px">乙方</div>
+      <div style="flex:1;min-width:300px">
+        <div class="muted" style="margin:4px 0 12px;font-weight:600;">👥 乙方簽名區域</div>
         <div id="qrB" class="qrGrid"></div>
       </div>
     </div>
-    <canvas id="stage" width="1000" height="1000"></canvas>
+    
+    <div style="margin-top:24px;">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="margin:0;color:var(--primary);">🖼️ 簽名畫布預覽</h3>
+        <div class="row">
+          <button id="zoomIn" class="primary">🔍+ 放大</button>
+          <button id="zoomOut" class="primary">🔍- 縮小</button>
+          <button id="resetZoom" class="primary">🎯 重置</button>
+        </div>
+      </div>
+      
+      <!-- 背景圖片控制 -->
+      <div class="background-controls">
+        <h4 style="margin:0 0 12px 0;color:var(--primary);">🖼️ 背景圖片設定</h4>
+        <div class="row">
+          <label class="file-upload">
+            📁 選擇背景圖片
+            <input id="backgroundUpload" type="file" accept="image/*" hidden>
+          </label>
+          <button id="clearBackground" class="danger">🗑️ 清除背景</button>
+          <div class="background-preview" id="backgroundPreview"></div>
+        </div>
+        <div class="muted" style="margin-top:8px;font-size:12px;">
+          支援 JPG、PNG、GIF 格式，建議尺寸與畫布相同
+        </div>
+      </div>
+      
+      <div style="position:relative;display:inline-block;">
+        <canvas id="stage" width="1000" height="1000"></canvas>
+        <div id="dragOverlay" style="position:absolute;top:0;left:0;pointer-events:none;"></div>
+      </div>
+    </div>
   </div>
 </main>
 
-<script>
-let socket, eventId=null, eventMeta=null, isAdmin=false, showAll=false;
-const stage=document.getElementById('stage'), ctx=stage.getContext('2d');
-
-function getToken(){ return localStorage.getItem('token')||''; }
-function setToken(t){ localStorage.setItem('token',t); }
-function clearToken(){ localStorage.removeItem('token'); }
-function withAuth(init={}){ const h=init.headers?new Headers(init.headers):new Headers(); const t=getToken(); if(t) h.set('Authorization','Bearer '+t); if(!h.has('Content-Type') && init.body) h.set('Content-Type','application/json'); return {...init, headers:h}; }
-async function api(url,opt={}){ try{ const r=await fetch(url,withAuth(opt)); let j={}; try{ j=await r.json(); }catch{} return {r,j}; }catch(e){ return {r:{ok:false,status:0}, j:{error:String(e)}}; } }
-
-function showAuthMask(on){ document.getElementById('authMask').hidden=!on; }
-async function requireLogin(){
-  if(!getToken()){ showAuthMask(true); return false; }
-  const {r,j}=await api('/api/me');
-  if(!r.ok){ showAuthMask(true); return false; }
-  isAdmin = j.role==='admin';
-  document.getElementById('who').innerHTML = `${j.email}${isAdmin?'<span class="adminBadge">管理者</span>':''}`;
-  document.getElementById('adminOps').hidden = !isAdmin;
-  return true;
-}
-
-// ---- Auth ----
-authLogin.onclick = async ()=>{
-  const email=authEmail.value.trim(), password=authPwd.value.trim();
-  const {r,j}=await api('/api/login',{method:'POST', body:JSON.stringify({email,password})});
-  if(!r.ok){ authMsg.textContent=j.error||'登入失敗'; return; }
-  setToken(j.token); showAuthMask(false); await loadEvents();
-};
-btnRegister.onclick=()=>{ regBox.hidden=false; forgotBox.hidden=true; resetBox.hidden=true; };
-btnForgot.onclick =()=>{ forgotBox.hidden=false; regBox.hidden=true; resetBox.hidden=true; };
-btnReset.onclick  =()=>{ resetBox.hidden=false; forgotBox.hidden=true; regBox.hidden=true; };
-doRegister.onclick=async ()=>{
-  const email=regEmail.value.trim(), password=regPwd.value.trim();
-  if(!/^[0-9]{6}$/.test(password)){ regMsg.textContent='密碼需為 6 位數字'; return; }
-  const {r,j}=await api('/api/register',{method:'POST', body:JSON.stringify({email,password})});
-  if(!r.ok){ regMsg.textContent=j.error||'註冊失敗'; return; }
-  const login=await api('/api/login',{method:'POST', body:JSON.stringify({email,password})});
-  if(login.r.ok){ setToken(login.j.token); showAuthMask(false); await loadEvents(); } else { regMsg.textContent='註冊成功，請回上方登入'; }
-};
-sendCode.onclick=async ()=>{ const email=forgotEmail.value.trim(); const {r,j}=await api('/api/forgot',{method:'POST', body:JSON.stringify({email})}); forgotMsg.textContent=r.ok?(j.code?`驗證碼（測試）：${j.code}`:'已寄出'): (j.error||'失敗'); };
-doReset.onclick =async ()=>{
-  const email=resetEmail.value.trim(), code=resetCode.value.trim(), newPassword=resetPwd.value.trim();
-  if(!/^[0-9]{6}$/.test(newPassword)){ resetMsg.textContent='新密碼需為 6 位數字'; return; }
-  const {r,j}=await api('/api/reset',{method:'POST', body:JSON.stringify({email,code,newPassword})});
-  resetMsg.textContent = r.ok ? '重設成功，請回上方登入。' : (j.error||'重設失敗');
-};
-logout.onclick=()=>{ clearToken(); events.innerHTML=''; showAuthMask(true); };
-
-// ---- 歷史房間 ----
-async function loadEvents(){
-  if(!(await requireLogin())) return;
-  const {r,j}=await api('/api/events'+(showAll?'?all=1':'')); 
-  events.innerHTML='';
-  if(!r.ok){ events.innerHTML='<div class="muted">讀取失敗，請重新登入</div>'; return; }
-  (j.items||[]).forEach(ev=>{
-    const card=document.createElement('div'); card.className='card';
-    card.innerHTML=`
-      <div style="font-weight:600;">房號：${ev.id}</div>
-      <div class="muted">${ev.title}・${ev.stage.width}×${ev.stage.height}</div>
-      <div class="muted"><span class="pill">建立於</span> ${ev.createdAt||''}</div>
-      <div class="row" style="margin-top:6px;">
-        <button class="open" data-id="${ev.id}">開啟</button>
-        <a href="/admin.html?eventId=${ev.id}" target="_blank"><button type="button">新分頁</button></a>
-        <button class="del" data-id="${ev.id}" style="margin-left:auto;border-color:#f1c0c0;background:#fff0f0">刪除此房</button>
-      </div>`;
-    events.appendChild(card);
-  });
-  events.querySelectorAll('button.open').forEach(b=> b.onclick=()=> selectEvent(b.dataset.id));
-  events.querySelectorAll('button.del').forEach(b=> b.onclick=()=> deleteEvent(b.dataset.id));
-}
-async function deleteEvent(id){
-  if(!confirm(`確定刪除房號 ${id}？`)) return;
-  const {r,j}=await api('/api/event/'+encodeURIComponent(id),{method:'DELETE'});
-  if(!r.ok){ alert(j.error||'刪除失敗'); return; }
-  if(eventId===id){ eventId=null; eventMeta=null; resetCanvasUI(); }
-  await loadEvents();
-}
-clearMine.onclick=async ()=>{
-  if(!confirm('確定刪除你的所有歷史？')) return;
-  const {r,j}=await api('/api/events/clear',{method:'POST'});
-  if(!r.ok){ alert(j.error||'清除失敗'); return; }
-  eventId=null; eventMeta=null; resetCanvasUI(); await loadEvents();
-};
-toggleAll.onclick = async ()=>{ showAll=!showAll; toggleAll.textContent=showAll?'只顯示我的':'顯示全部房間'; await loadEvents(); };
-clearAllUsers.onclick = async ()=>{
-  if(!confirm('【管理者】確定刪除所有人的歷史？')) return;
-  const {r,j}=await api('/api/admin/events/clear-all',{method:'POST'});
-  if(!r.ok){ alert(j.error||'清除失敗'); return; }
-  eventId=null; eventMeta=null; resetCanvasUI(); await loadEvents();
-};
-
-// ---- 畫布 / QR ----
-function resetCanvasUI(){ eventInfo.textContent='尚未選擇房間'; qrA.innerHTML=''; qrB.innerHTML=''; ctx.clearRect(0,0,stage.width,stage.height); }
-async function fetchEvent(id){ const r=await fetch(`/api/event/${id}`); if(!r.ok) throw new Error('not found'); return await r.json(); }
-function drawSlots(){
-  ctx.clearRect(0,0,stage.width,stage.height);
-  ctx.save(); ctx.strokeStyle='#777'; ctx.lineWidth=2; ctx.font='16px system-ui'; ctx.fillStyle='#444';
-  const A=eventMeta.slots.A, B=eventMeta.slots.B;
-  A.forEach((s,i)=>{ ctx.strokeRect(s.x,s.y,s.w,s.h); ctx.fillText(`甲方 A-${i+1}`, s.x+8, s.y+20); });
-  B.forEach((s,i)=>{ ctx.strokeRect(s.x,s.y,s.w,s.h); ctx.fillText(`乙方 B-${i+1}`, s.x+8, s.y+20); });
-  ctx.restore();
-}
-function getBase(){ return location.origin.replace(/\/+$/,''); }
-
-/* ★ 卡片式 QR 渲染：清楚顯示「誰的 QR」 */
-function renderQRCodes(){
-  const base=getBase()+`/signer.html?eventId=${encodeURIComponent(eventId)}`;
-  const aBox=document.getElementById('qrA');
-  const bBox=document.getElementById('qrB');
-  aBox.innerHTML=''; bBox.innerHTML='';
-
-  const makeCard=(label,url)=>{
-    const wrap=document.createElement('div'); wrap.className='qrCard';
-    const cap=document.createElement('div'); cap.className='cap'; cap.textContent=label;
-    const c=document.createElement('canvas'); c.width=160; c.height=160;
-    wrap.appendChild(cap); wrap.appendChild(c);
-    QRCode.toCanvas(c,url);
-    return wrap;
-  };
-
-  (eventMeta.slots.A||[]).forEach((_,i)=>{
-    aBox.appendChild(makeCard(`甲方 A-${i+1}`, `${base}&slot=A&idx=${i}`));
-  });
-  (eventMeta.slots.B||[]).forEach((_,i)=>{
-    bBox.appendChild(makeCard(`乙方 B-${i+1}`, `${base}&slot=B&idx=${i}`));
-  });
-}
-
-async function selectEvent(id){
-  eventId=id; eventMeta=await fetchEvent(id);
-  stage.width=eventMeta.stage.width; stage.height=eventMeta.stage.height;
-  eventInfo.textContent=`房號 ${eventMeta.id} ・ 畫布 ${stage.width}×${stage.height}`;
-  drawSlots(); renderQRCodes();
-
-  if(socket) socket.disconnect();
-  socket = io(); socket.emit('join:event', {eventId, role:'admin'});
-  socket.on('stroke', ({points,size,color, senderSide, senderIndex, sourceWidth, sourceHeight})=>{
-    const arr=eventMeta.slots[senderSide]; if(!arr||!arr[senderIndex]) return;
-    const s=arr[senderIndex], sx=s.w/sourceWidth, sy=s.h/sourceHeight;
-    ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=size*Math.max(sx,sy);
-    ctx.beginPath(); const p0=points[0]; ctx.moveTo(s.x+p0[0]*sx, s.y+p0[1]*sy);
-    for(let i=1;i<points.length;i++){ const p=points[i]; ctx.lineTo(s.x+p[0]*sx, s.y+p[1]*sy); }
-    ctx.stroke(); ctx.restore();
-  });
-  socket.on('clear', ({senderSide, senderIndex})=>{
-  const arr=eventMeta.slots[senderSide];
-  if(!arr || !arr[senderIndex]) return;
-  const s=arr[senderIndex];
-
-  // 只清該欄位
-  ctx.clearRect(s.x, s.y, s.w, s.h);
-
-  // 補回邊框與標籤
-  ctx.save();
-  ctx.strokeStyle='#777';
-  ctx.lineWidth=2;
-  ctx.font='16px system-ui';
-  ctx.fillStyle='#444';
-  ctx.strokeRect(s.x, s.y, s.w, s.h);
-  ctx.fillText(`${senderSide}-${Number(senderIndex)+1}`, s.x+8, s.y+20);
-  ctx.restore();
-});
-  socket.on('slots:update', ({A,B})=>{ eventMeta.slots.A=A; eventMeta.slots.B=B; drawSlots(); renderQRCodes(); });
-  socket.on('event:deleted', (p)=>{ if(p?.eventId===eventId){ alert('此房間已被刪除'); eventId=null; eventMeta=null; resetCanvasUI(); }});
-}
-
-// ---- 欄位數自動排版（統一不跑版）----
-applyCounts.onclick=async ()=>{
-  if(!eventId) return alert('請先選擇房間或建立房間');
-
-  const W=stage.width, H=stage.height;
-  const PAD=16, GAP=12, GAP_ROW=12, BOT=16;
-  const rowH = Math.max(120, Math.round(H*0.16));
-
-  const cntA=Math.max(0, parseInt(countA.value||'0',10));
-  const cntB=Math.max(0, parseInt(countB.value||'0',10));
-
-  const layoutRow = (n, y) => {
-    if(n<=0) return [];
-    const w = Math.round((W - PAD*2 - GAP*(n-1)) / n);
-    const xs = Array.from({length:n}, (_,i)=> PAD + i*(w+GAP));
-    return xs.map(x => ({ x, y, w, h: rowH }));
-  };
-
-  const yB = H - BOT - rowH;         // 乙方最底
-  const yA = yB - GAP_ROW - rowH;    // 甲方在上
-  const A = layoutRow(cntA, yA);
-  const B = layoutRow(cntB, yB);
-
-  const {r,j}=await api(`/api/event/${encodeURIComponent(eventId)}/slots`,{
-    method:'POST',
-    body: JSON.stringify({A,B})
-  });
-  if(!r.ok){ alert(j.error||'更新失敗'); return; }
-
-  eventMeta.slots.A=A; eventMeta.slots.B=B;
-  drawSlots(); renderQRCodes();
-};
-
-// 建立/刷新
-createEvent.onclick=async ()=>{
-  if(!(await requireLogin())) return;
-  const stageWidth=parseInt(w.value||'1000',10), stageHeight=parseInt(h.value||'1000',10);
-  const title=document.getElementById('title').value.trim()||undefined;
-  const {r,j}=await api('/api/create-event',{method:'POST', body:JSON.stringify({title,stageWidth,stageHeight})});
-  if(!r.ok){ alert(j.error||'建立失敗'); return; }
-  await loadEvents(); await selectEvent(j.eventId);
-};
-refreshEvents.onclick=loadEvents;
-
-// 啟動
-showAuthMask(true);
-requireLogin().then(ok=>{
-  const pre = new URL(location.href).searchParams.get('eventId');
-  if(ok){ loadEvents().then(()=>{ if(pre) selectEvent(pre); }); }
-});
-</script>
+<script src="admin.js"></script>
 </body>
 </html>
